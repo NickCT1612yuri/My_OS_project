@@ -56,6 +56,7 @@ struct pcb_t * load(const char * path) {
 		(struct page_table_t*)malloc(sizeof(struct page_table_t));
 	proc->bp = PAGE_SIZE;
 	proc->pc = 0;
+	proc->mode_bit = 1; // Start in User mode
 
 	/* Read process code from file */
 	FILE * file;

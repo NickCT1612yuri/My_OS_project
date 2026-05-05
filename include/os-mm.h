@@ -12,6 +12,7 @@
 #define OSMM_H
 
 #include <stdint.h>
+#include <pthread.h>
 
 #define MM_PAGING
 #define PAGING_MAX_MMSWP 4 /* max number of supported swapped space */
@@ -146,6 +147,9 @@ struct memphy_struct {
    /* Management structure */
    struct framephy_struct *free_fp_list;
    struct framephy_struct *used_fp_list;
+   
+   /* Concurrency control */
+   pthread_mutex_t lock;
 };
 
 #endif

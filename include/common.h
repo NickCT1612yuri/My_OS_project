@@ -118,6 +118,7 @@ struct pcb_t
 	struct krnl_t *krnl;	
 	struct page_table_t *page_table; // Page table
 	uint32_t bp;			 // Break pointer
+	unsigned long mode_bit;  // 1 = User mode, 0 = Kernel mode
 };
 
 /* Kernel structure */

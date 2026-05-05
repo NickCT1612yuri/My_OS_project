@@ -99,18 +99,23 @@ int run(struct pcb_t *proc)
                 break;
 #ifdef MM_PAGING
         case KMALLOC:
+                if (proc->mode_bit == 1) { stat = 1; break; }
                 stat = libkmem_malloc(proc, ins.arg_0, ins.arg_1);
                 break;
         case KMEM_CACHE_CREATE:
+                if (proc->mode_bit == 1) { stat = 1; break; }
                 stat = libkmem_cache_pool_create(proc, ins.arg_0, ins.arg_1, ins.arg_2);
                 break;
         case KMEM_CACHE_ALLOC:
+                if (proc->mode_bit == 1) { stat = 1; break; }
                 stat = libkmem_cache_alloc(proc, ins.arg_0, ins.arg_1);
                 break;
         case COPY_FROM_USER:
+                if (proc->mode_bit == 1) { stat = 1; break; }
                 stat = libkmem_copy_from_user(proc, ins.arg_0, ins.arg_1, ins.arg_2, ins.arg_3);
                 break;
         case COPY_TO_USER:
+                if (proc->mode_bit == 1) { stat = 1; break; }
                 stat = libkmem_copy_to_user(proc, ins.arg_0, ins.arg_1, ins.arg_2, ins.arg_3);
                 break;
 
@@ -147,7 +152,9 @@ int run(struct pcb_t *proc)
 #endif
                 break;
         case SYSCALL:
+                proc->mode_bit = 0;
                 stat = libsyscall(proc, ins.arg_0, ins.arg_1, ins.arg_2, ins.arg_3);
+                proc->mode_bit = 1;
                 break;
         default:
                 stat = 1;
