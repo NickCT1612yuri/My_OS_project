@@ -126,26 +126,22 @@ int free_mem(addr_t address, struct pcb_t * proc) {
 
 int read_mem(addr_t address, struct pcb_t * proc, BYTE * data) {
 	addr_t physical_addr;
-	pthread_mutex_lock(&mem_lock);
-	int ret = 1;
 	if (translate(address, &physical_addr, proc)) {
 		*data = _ram[physical_addr];
-		ret = 0;
+		return 0;
+	}else{
+		return 1;
 	}
-	pthread_mutex_unlock(&mem_lock);
-	return ret;
 }
 
 int write_mem(addr_t address, struct pcb_t * proc, BYTE data) {
 	addr_t physical_addr;
-	pthread_mutex_lock(&mem_lock);
-	int ret = 1;
 	if (translate(address, &physical_addr, proc)) {
 		_ram[physical_addr] = data;
-		ret = 0;
+		return 0;
+	}else{
+		return 1;
 	}
-	pthread_mutex_unlock(&mem_lock);
-	return ret;
 }
 
 void dump(void) {
