@@ -1,0 +1,214 @@
+\section{Memory Management}
+\subsection{Virtual Memory Architecture}
+The memory manager utilizes a paging scheme to separate the physical memory (RAM and SWAP) from the contiguous virtual addresses seen by user processes.
+
+The virtual memory subsystem tracks allocations at three levels:
+\begin{enumerate}
+    \item \textbf{Virtual Memory Areas (\texttt{vm\_area\_struct}):} Represents large contiguous chunks of virtual memory. Each area maintains a \texttt{sbrk} pointer representing the top of the heap. Memory beneath \texttt{sbrk} is managed by \texttt{vm\_freerg\_list}, which keeps track of freed regions to combat internal fragmentation.
+    \item \textbf{Symbol Table (\texttt{symrgtbl}):} Since processes execute simple instructions via registers, this table maps register indices (0 to 29) to allocated virtual memory regions. Each entry is a \texttt{vm\_rg\_struct} with \texttt{rg\_start} and \texttt{rg\_end} fields defining the byte range. The table size is fixed at \texttt{PAGING\_MAX\_SYMTBL\_SZ = 30}.
+    \item \textbf{Page Tables:} Translates virtual pages to physical frames. In the 64-bit build (\texttt{MM64}), this is a 5-level hierarchy (PGD $\to$ P4D $\to$ PUD $\to$ PMD $\to$ PT). In the legacy 32-bit build, a single flat \texttt{pgd} array is used.
+\end{enumerate}
+
+\subsection{The ALLOC Operation (\texttt{liballoc})}
+When a user process issues an \texttt{alloc [size] [reg]} instruction, \texttt{liballoc()} handles it via a highly optimized Two-Phase Allocation Strategy.
+
+\begin{infobox}[Two-Phase Allocation Strategy]
+\textbf{Phase 1: Memory Reuse (First-Fit Algorithm)}\\
+Before requesting new pages from the kernel, the system scans \texttt{vm\_freerg\_list} via \texttt{get\_free\_vmrg\_area()}. If a previously freed block is large enough, it assigns the block to the requested register, avoiding expensive kernel system calls. The first-fit traversal splits the chosen region: the requested portion is assigned to the symbol table, and any leftover space remains in the free list.
+
+\textbf{Phase 2: Heap Extension (System Call)}\\
+If no free blocks are suitable, the system invokes \texttt{SYSMEM\_INC\_OP} via \texttt{\_syscall(caller->krnl, caller->pid, 17, \&regs)} to ask the kernel to increase \texttt{sbrk}. The size is page-aligned using \texttt{PAGING\_PAGE\_ALIGNSZ(size)} (padded to the next multiple of page size). The kernel handler \texttt{inc\_vma\_limit()} expands the VMA boundary, calls \texttt{vm\_map\_ram()} to allocate physical frames and populate page table entries, and advances \texttt{sbrk}. Leftover space from the page-aligned expansion is added back to \texttt{vm\_freerg\_list} for future first-fit allocations.
+\end{infobox}
+
+\begin{lstlisting}[language=C, caption=Heap Extension via \texttt{\_syscall} (\texttt{libmem.c})]
+int __alloc(struct pcb_t *caller, int vmaid, int rgid, 
+            addr_t size, addr_t *alloc_addr)
+{
+  pthread_mutex_lock(&mmvm_lock);
+  struct vm_area_struct *cur_vma = get_vma_by_num(caller->krnl->mm, vmaid);
+
+  // Phase 1: Try to reuse a freed region
+  if (get_free_vmrg_area(caller, vmaid, size, &rgnode) == 0) {
+    caller->krnl->mm->symrgtbl[rgid].rg_start = rgnode.rg_start;
+    caller->krnl->mm->symrgtbl[rgid].rg_end = rgnode.rg_end;
+    *alloc_addr = rgnode.rg_start;
+    pthread_mutex_unlock(&mmvm_lock);
+    return 0;
+  }
+
+  // Phase 2: Expand the heap via system call
+  int old_sbrk = cur_vma->sbrk;
+  struct sc_regs regs;
+  regs.a1 = SYSMEM_INC_OP;
+  regs.a2 = vmaid;
+  regs.a3 = PAGING_PAGE_ALIGNSZ(size);
+  _syscall(caller->krnl, caller->pid, 17, &regs);
+
+  // Register the expanded region in the symbol table
+  caller->krnl->mm->symrgtbl[rgid].rg_start = old_sbrk;
+  caller->krnl->mm->symrgtbl[rgid].rg_end = old_sbrk + size;
+  *alloc_addr = old_sbrk;
+
+  pthread_mutex_unlock(&mmvm_lock);
+  return 0;
+}
+\end{lstlisting}
+
+\subsection{The FREE Operation (\texttt{\_\_free})}
+The \texttt{free [reg]} instruction is non-destructive to the physical page table.
+\begin{lstlisting}[language=C, caption=FREE implementation (\texttt{libmem.c})]
+int __free(struct pcb_t *caller, int vmaid, int rgid) {
+    pthread_mutex_lock(&mmvm_lock);
+    struct vm_rg_struct *rgnode = get_symrg_byid(caller->krnl->mm, rgid);
+    
+    if (rgnode->rg_start == 0 && rgnode->rg_end == 0) {
+        pthread_mutex_unlock(&mmvm_lock);
+        return -1; // Nothing to free (never allocated)
+    }
+    
+    // Copy the region to a new free node
+    struct vm_rg_struct *freerg_node = malloc(sizeof(struct vm_rg_struct));
+    freerg_node->rg_start = rgnode->rg_start;
+    freerg_node->rg_end = rgnode->rg_end;
+    freerg_node->rg_next = NULL;
+
+    // Erase from symbol table and add to free list
+    rgnode->rg_start = rgnode->rg_end = 0;
+    rgnode->rg_next = NULL;
+    enlist_vm_freerg_list(caller->krnl->mm, freerg_node);
+    pthread_mutex_unlock(&mmvm_lock);
+    return 0;
+}
+\end{lstlisting}
+\textbf{Analysis:} By choosing not to deallocate the physical frames immediately, the OS significantly reduces the overhead of page table manipulation. Re-allocating the same space later instantly succeeds via Phase 1. Note the guard check \texttt{rg\_start == 0 \&\& rg\_end == 0}: if a register was never allocated (e.g., a blocked \texttt{KMALLOC} instruction), the free operation returns $-1$. This produces the \texttt{libfree:218 failed} message seen in the execution traces.
+
+\subsection{READ/WRITE \& Page Replacement Strategy}
+Reads and Writes are handled by \texttt{\_\_read} and \texttt{\_\_write}. These traverse the virtual bounds to find the exact byte.
+
+\begin{lstlisting}[language=C, caption=Reading Virtual Memory (\texttt{libmem.c})]
+int pg_getval(struct mm_struct *mm, int addr, BYTE *data, struct pcb_t *caller) {
+    int pgn = PAGING_PGN(addr);
+    int off = PAGING_OFFST(addr);
+    int fpn;
+
+    /* Get the page to RAM. Handles page faults internally! */
+    if (pg_getpage(mm, pgn, &fpn, caller) != 0) 
+        return -1;
+
+    int phyaddr = (fpn << PAGING_ADDR_FPN_LOBIT) + off;
+    
+    struct sc_regs regs;
+    regs.a1 = SYSMEM_IO_READ;
+    regs.a2 = phyaddr;
+    regs.a3 = 0;
+    _syscall(caller->krnl, caller->pid, 17, &regs);
+    *data = (BYTE)regs.a3;
+    return 0;
+}
+\end{lstlisting}
+
+\begin{theorybox}[Physical Address Computation]
+The physical address is computed as \texttt{(fpn << PAGING\_ADDR\_FPN\_LOBIT) + off}, which is equivalent to \texttt{fpn * PAGING\_PAGESZ + off}. The bit-shift formulation is used because \texttt{PAGING\_ADDR\_FPN\_LOBIT} equals $\log_2(\texttt{PAGING\_PAGESZ})$, and left-shifting by this value is a faster equivalent of multiplication by the page size. The read/write operations themselves are performed through the system call interface (\texttt{SYSMEM\_IO\_READ}/\texttt{SYSMEM\_IO\_WRITE}) to maintain the user--kernel boundary: the actual \texttt{MEMPHY\_read}/\texttt{MEMPHY\_write} calls happen inside \texttt{\_\_sys\_memmap} in kernel space.
+\end{theorybox}
+
+\subsection{Detailed Page Fault Mechanics}
+If the page resides in SWAP instead of RAM, \texttt{pg\_getpage()} triggers a \textbf{Page Fault}. The kernel intercepts this and initiates a Page Replacement sequence using a strict FIFO queue (\texttt{mm->fifo\_pgn}):
+
+\textbf{Case 1: Free frame available.} If \texttt{MEMPHY\_get\_freefp()} succeeds, the page is assigned the free frame directly via \texttt{pte\_set\_fpn()} and added to the FIFO list.
+
+\textbf{Case 2: No free frames (full replacement path):}
+\begin{enumerate}
+    \item \textbf{Find Victim:} Dequeue the oldest page from \texttt{fifo\_pgn} using \texttt{find\_victim\_page()}. This function walks the singly-linked list to find the \textbf{tail node}---the oldest entry---implementing true FIFO ordering.
+    \item \textbf{Swap Out:} Copy the victim page from RAM into the secondary SWAP device using \texttt{\_\_swap\_cp\_page(mram, vicfpn, active\_mswp, swpfpn)}. Update the victim's PTE via \texttt{pte\_set\_swap()} to record the swap device ID and swap offset.
+    \item \textbf{Swap In:} If the requested page was previously swapped out (indicated by the \texttt{PAGING\_PTE\_SWAPPED\_MASK} bit), copy it back from SWAP to the victim's freed frame. Otherwise, zero-fill the frame (new allocation).
+    \item \textbf{Update PTEs:} Update the Page Table Entry for the newly loaded page via \texttt{pte\_set\_fpn()} to clear the swapped bit and set the FPN. Push the newly loaded page into \texttt{fifo\_pgn}.
+\end{enumerate}
+
+\textbf{Example of a Page Fault:}\\
+Assume RAM has exactly 2 frames. Process 1 requests 3 pages.
+1. CPU executes \texttt{alloc 512} (Page 0 and Page 1). RAM Frame 0 and 1 are used.
+2. CPU executes alloc 256 (Page 2). RAM is full. The OS triggers a Page Replacement (Swapping) sequence.3. The OS selects Page 0 (oldest) as the victim. 
+4. \texttt{\_\_swap\_cp\_page(RAM, 0, SWAP, 0)} is called. Page 0 is now on disk.
+5. RAM Frame 0 is now assigned to Page 2. 
+6. If the CPU subsequently tries to read Page 0, a \textit{second} Page Fault occurs. The OS will select Page 1 as the victim, swap it to disk, and bring Page 0 back into RAM Frame 1.
+
+\subsection{Kernel Memory Operations}
+The specification defines three kernel-space memory instructions that enable privileged allocation patterns modeled after Linux's kernel memory subsystem. These are implemented in \texttt{libmem.c} and protected by the \texttt{mode\_bit} check described in Section 2.
+
+\subsubsection{\texttt{KMALLOC} --- Physically Contiguous Allocation}
+The \texttt{kmalloc [size] [reg]} instruction allocates a contiguous block of \textit{physical} memory. Unlike user-space \texttt{ALLOC} which allows the OS to scatter pages across non-contiguous frames, \texttt{KMALLOC} requires that the allocated frames form a \textbf{consecutive sequence} in physical RAM:
+\begin{lstlisting}[language=C, caption=\texttt{\_\_kmalloc} contiguity check (\texttt{libmem.c})]
+addr_t __kmalloc(struct pcb_t *caller, int vmaid, int rgid, 
+                 addr_t size, addr_t *alloc_addr)
+{
+  // First, attempt a normal virtual allocation
+  if (__alloc(caller, 0, rgid, size, alloc_addr) < 0)
+    return (addr_t)-1;
+
+  // Then verify physical contiguity
+  if (!is_phys_contiguous_region(caller, *alloc_addr, size)) {
+    __free(caller, 0, rgid); // Roll back
+    return (addr_t)-1;
+  }
+  return *alloc_addr;
+}
+\end{lstlisting}
+The helper \texttt{is\_phys\_contiguous\_region()} walks the page table entries for the allocated virtual range and verifies that each successive PTE's frame page number (FPN) is exactly one greater than the previous. If the frames are scattered, the allocation is rolled back. This models real-world DMA buffers and kernel data structures that require contiguous physical memory.
+
+\subsubsection{User/Kernel Address Tagging}
+To distinguish user-space allocations from kernel-space allocations, the system uses a \textbf{tag bit} mechanism:
+\begin{lstlisting}[language=C, caption=Address tagging (\texttt{libmem.c})]
+#ifdef MM64
+#define KERNEL_ADDR_TAG ((addr_t)1ULL << 63)
+#else
+#define KERNEL_ADDR_TAG ((addr_t)1U << 31)
+#endif
+
+static int is_kernel_addr(addr_t addr) {
+  return (addr & KERNEL_ADDR_TAG) != 0;
+}
+static addr_t to_kernel_addr(addr_t addr) {
+  return addr | KERNEL_ADDR_TAG;
+}
+\end{lstlisting}
+When \texttt{libkmem\_malloc()} stores a kernel allocation address in a register, it tags the address by setting the most-significant bit (bit 63 for 64-bit, bit 31 for 32-bit): \texttt{caller->regs[reg\_index] = to\_kernel\_addr(addr)}. Subsequent \texttt{libread}/\texttt{libwrite} calls check \texttt{is\_kernel\_addr()} and \textbf{reject} user-mode accesses to kernel-tagged addresses. This mirrors the canonical address split in real x86-64 architectures, where user-space addresses have their top bits clear and kernel-space addresses have them set.
+
+\subsubsection{Slab Cache: \texttt{KMEM\_CACHE\_CREATE} \& \texttt{KMEM\_CACHE\_ALLOC}}
+The slab allocator avoids repeated allocation/initialization overhead by pre-defining fixed-size object pools:
+\begin{lstlisting}[language=C, caption=Cache pool creation (\texttt{libmem.c})]
+int libkmem_cache_pool_create(struct pcb_t *caller, uint32_t size, 
+                              uint32_t align, uint32_t cache_pool_id)
+{
+  if (caller->krnl->mm->kcpooltbl == NULL)
+    caller->krnl->mm->kcpooltbl = calloc(PAGING_MAX_SYMTBL_SZ, 
+                                          sizeof(struct kcache_pool_struct));
+
+  if (cache_pool_id >= PAGING_MAX_SYMTBL_SZ)
+    return -1;
+
+  caller->krnl->mm->kcpooltbl[cache_pool_id].size = size;
+  caller->krnl->mm->kcpooltbl[cache_pool_id].align = align;
+  caller->krnl->mm->kcpooltbl[cache_pool_id].storage = 0;
+  return 0;
+}
+\end{lstlisting}
+\texttt{KMEM\_CACHE\_CREATE} registers a cache pool with a predefined object size and alignment. When \texttt{KMEM\_CACHE\_ALLOC} is later called, it delegates to \texttt{\_\_kmalloc} using the pool's stored size, guaranteeing that every allocation from the same cache pool produces physically contiguous blocks of identical size. This mirrors the Linux kernel's \texttt{kmem\_cache\_create()}/\texttt{kmem\_cache\_alloc()} API.
+
+\subsubsection{\texttt{COPY\_FROM\_USER} \& \texttt{COPY\_TO\_USER}}
+These instructions enable safe data transfer across the user/kernel boundary:
+\begin{lstlisting}[language=C, caption=Cross-boundary memory copy (\texttt{libmem.c})]
+int libkmem_copy_from_user(struct pcb_t *caller, uint32_t source, 
+                           uint32_t destination, uint32_t offset, 
+                           uint32_t size) {
+  uint32_t i;
+  BYTE data;
+  for (i = 0; i < size; i++) {
+    if (__read_user_mem(caller, 0, source, offset + i, &data) < 0)
+      return -1;
+    if (__write_kernel_mem(caller, 0, destination, i, data) < 0)
+      return -1;
+  }
+  return 0;
+}
+\end{lstlisting}
+\texttt{COPY\_FROM\_USER} reads byte-by-byte from a user-space region and writes to a kernel-space region. \texttt{COPY\_TO\_USER} performs the reverse. The helper functions \texttt{\_\_read\_user\_mem} and \texttt{\_\_write\_kernel\_mem} enforce address-space isolation: \texttt{\_\_read\_user\_mem} rejects reads from kernel-tagged addresses (via \texttt{is\_kernel\_addr()}), and \texttt{\_\_write\_kernel\_mem} rejects writes to non-kernel-tagged addresses. This prevents user processes from smuggling kernel pointers to escalate privileges.

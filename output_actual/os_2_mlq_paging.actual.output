@@ -1,0 +1,198 @@
+Time slot   0
+ld_routine
+Time slot   1
+Time slot   2
+Time slot   3
+Time slot   4
+Time slot   5
+	Loaded a process at input/proc/m2s, PID: 1 PRIO: 120
+Time slot   6
+	CPU 3: Dispatched process  1
+liballoc:178
+print_pgtbl:
+ PDG=0000000c21010000 P4g=0000000c2100b000 PUD=0000000c2100d000 PMD=000000010527aba0
+print_list_vma:
+vma_id=0 start=0 end=1000 sbrk=1000
+print_list_rg: [12c->1000] [0->0]
+Time slot   7
+liballoc:178
+print_pgtbl:
+ PDG=0000000c21010000 P4g=0000000c2100b000 PUD=0000000c2100d000 PMD=000000010527aba0
+print_list_vma:
+vma_id=0 start=0 end=1000 sbrk=1000
+print_list_rg: [190->1000] [0->0]
+Time slot   8
+	CPU 3: Put process  1 to run queue
+	CPU 3: Dispatched process  1
+libfree:218
+print_pgtbl:
+ PDG=0000000c21010000 P4g=0000000c2100b000 PUD=0000000c2100d000 PMD=000000010527aba0
+print_list_vma:
+vma_id=0 start=0 end=1000 sbrk=1000
+print_list_rg: [0->12c] [190->1000] [0->0]
+Time slot   9
+	Loaded a process at input/proc/s0, PID: 2 PRIO: 38
+	CPU 1: Dispatched process  2
+Time slot  10
+	CPU 3: Put process  1 to run queue
+	CPU 3: Dispatched process  1
+Time slot  11
+	Loaded a process at input/proc/s3, PID: 3 PRIO: 39
+	CPU 1: Put process  2 to run queue
+	CPU 1: Dispatched process  2
+Time slot  12
+	CPU 0: Dispatched process  3
+	CPU 3: Put process  1 to run queue
+	CPU 3: Dispatched process  1
+Time slot  13
+	CPU 1: Put process  2 to run queue
+	CPU 1: Dispatched process  2
+Time slot  14
+	CPU 0: Put process  3 to run queue
+	CPU 0: Dispatched process  3
+	CPU 3: Put process  1 to run queue
+	CPU 3: Dispatched process  1
+	Loaded a process at input/proc/m2s, PID: 4 PRIO: 15
+Time slot  15
+libfree:218 failed
+print_pgtbl:
+ PDG=0000000c21010000 P4g=0000000c2100b000 PUD=0000000c2100d000 PMD=000000010527aba0
+print_list_vma:
+vma_id=0 start=0 end=1000 sbrk=1000
+	CPU 1: Put process  2 to run queue
+	CPU 2: Dispatched process  4
+	CPU 1: Dispatched process  2
+print_list_rg: [0->12c] [190->1000] [0->0]
+liballoc:178
+print_pgtbl:
+ PDG=0000000c21013000 P4g=0000000c21020000 PUD=0000000c21024000 PMD=0000000c2101a000
+print_list_vma:
+vma_id=0 start=0 end=1000 sbrk=1000
+print_list_rg: [12c->1000] [0->0]
+Time slot  16
+	CPU 3: Put process  1 to run queue
+	CPU 3: Dispatched process  1
+liballoc:178
+print_pgtbl:
+ PDG=0000000c21013000 P4g=0000000c21020000 PUD=0000000c21024000 PMD=0000000c2101a000
+print_list_vma:
+vma_id=0 start=0 end=1000 sbrk=1000
+print_list_rg: libfree:218
+print_pgtbl:
+ PDG=0000000c21010000 P4g=0000000c2100b000 PUD=0000000c2100d000 PMD=000000010527aba0
+print_list_vma:
+vma_id=0 start=0 end=1000 sbrk=1000
+print_list_rg: [12c->190] [0->12c]	CPU 0: Put process  3 to run queue
+	CPU 0: Dispatched process  3
+[190->1000] [0->0] [190->1000] [0->0]
+
+	Loaded a process at input/proc/s2, PID: 5 PRIO: 120
+Time slot  17
+libfree:218 failed
+print_pgtbl:
+ PDG=0000000c21010000 P4g=0000000c2100b000 PUD=0000000c2100d000 PMD=000000010527aba0
+print_list_vma:
+vma_id=0 start=0 end=1000 sbrk=1000
+	CPU 1: Put process  2 to run queue
+	CPU 1: Dispatched process  2
+	Loaded a process at input/proc/s1, PID: 6 PRIO: 0
+	CPU 2: Put process  4 to run queue
+	CPU 2: Dispatched process  6
+print_list_rg: [12c->190] [0->12c] [190->1000] [0->0]
+Time slot  18
+	CPU 3: Processed  1 has finished
+	CPU 3: Dispatched process  4
+libfree:218
+print_pgtbl:
+ PDG=0000000c21013000 P4g=0000000c21020000 PUD=0000000c21024000 PMD=0000000c2101a000
+print_list_vma:
+vma_id=0 start=0 end=1000 sbrk=1000
+print_list_rg: [0->12c] [190->1000] [0->0]
+	CPU 0: Put process  3 to run queue
+	CPU 0: Dispatched process  3
+Time slot  19
+	CPU 2: Put process  6 to run queue
+	CPU 2: Dispatched process  6
+	CPU 1: Put process  2 to run queue
+	CPU 1: Dispatched process  2
+Time slot  20
+	CPU 3: Put process  4 to run queue
+	CPU 3: Dispatched process  4
+	CPU 0: Put process  3 to run queue
+	CPU 0: Dispatched process  3
+Time slot  21
+	CPU 2: Put process  6 to run queue
+	CPU 2: Dispatched process  6
+	CPU 1: Put process  2 to run queue
+	CPU 1: Dispatched process  2
+Time slot  22
+	CPU 3: Put process  4 to run queue
+	CPU 3: Dispatched process  4
+	CPU 0: Put process  3 to run queue
+	CPU 0: Dispatched process  3
+Time slot  23
+	CPU 2: Put process  6 to run queue
+	CPU 2: Dispatched process  6
+	CPU 1: Put process  2 to run queue
+	CPU 1: Dispatched process  2
+Time slot  24
+	CPU 3: Put process  4 to run queue
+	CPU 3: Dispatched process  4
+	CPU 1: Processed  2 has finished
+	CPU 1: Dispatched process  5
+	CPU 0: Put process  3 to run queue
+	CPU 0: Dispatched process  3
+Time slot  25
+libfree:218 failed
+print_pgtbl:
+ PDG=0000000c21013000 P4g=0000000c21020000 PUD=0000000c21024000 PMD=0000000c2101a000
+print_list_vma:
+vma_id=0 start=0 end=1000 sbrk=1000
+print_list_rg: [0->12c] [190->1000] [0->0]
+	CPU 2: Put process  6 to run queue
+	CPU 2: Dispatched process  6
+Time slot  26
+	CPU 3: Put process  4 to run queue
+	CPU 3: Dispatched process  4
+libfree:218
+print_pgtbl:
+ PDG=0000000c21013000 P4g=0000000c21020000 PUD=0000000c21024000 PMD=0000000c2101a000
+print_list_vma:
+	CPU 2: Processed  6 has finished
+	CPU 2 stopped
+	CPU 0: Put process  3 to run queue
+	CPU 0: Dispatched process  3
+vma_id=0 start=0 end=1000 sbrk=1000
+print_list_rg: [12c->190] [0->12c] [190->1000] [0->0]
+	CPU 1: Put process  5 to run queue
+	CPU 1: Dispatched process  5
+Time slot  27
+libfree:218 failed
+print_pgtbl:
+ PDG=0000000c21013000 P4g=0000000c21020000 PUD=0000000c21024000 PMD=0000000c2101a000
+print_list_vma:
+vma_id=0 start=0 end=1000 sbrk=1000
+print_list_rg: [12c->190] [0->12c] [190->1000] [0->0]
+Time slot  28
+	CPU 1: Put process  5 to run queue
+	CPU 0: Processed  3 has finished
+	CPU 3: Processed  4 has finished
+	CPU 3 stopped
+	CPU 0 stopped
+	CPU 1: Dispatched process  5
+Time slot  29
+Time slot  30
+	CPU 1: Put process  5 to run queue
+	CPU 1: Dispatched process  5
+Time slot  31
+Time slot  32
+	CPU 1: Put process  5 to run queue
+	CPU 1: Dispatched process  5
+Time slot  33
+Time slot  34
+	CPU 1: Put process  5 to run queue
+	CPU 1: Dispatched process  5
+Time slot  35
+Time slot  36
+	CPU 1: Processed  5 has finished
+	CPU 1 stopped

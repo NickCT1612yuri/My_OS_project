@@ -1,0 +1,130 @@
+\usepackage{a4wide,amssymb,epsfig,latexsym,multicol,array,hhline,fancyhdr}
+\usepackage[T2A,T5]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{amsmath}
+\usepackage{lastpage}
+\usepackage[lined,boxed,commentsnumbered]{algorithm2e}
+\usepackage{enumerate}
+\usepackage{color}
+\usepackage{graphicx}	% Standard graphics package
+\usepackage{titlesec}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{array}
+\usepackage{chngcntr} % For advanced counter manipulation
+\usepackage{tabularx, caption}
+\usepackage{tabularx}
+\usepackage{multirow}
+\usepackage{multicol}
+\usepackage{rotating}
+\usepackage{graphics}
+\usepackage{geometry}
+\usepackage{setspace}
+\usepackage{epsfig}
+\usepackage{tikz}
+\usepackage{array}
+\usepackage{float}
+\usepackage{tocloft} % For customizing the table of contents
+\usetikzlibrary{arrows,backgrounds}
+\usepackage{hyperref}
+\usepackage{subcaption}
+\def\thesislayout{	% A4: 210 × 297
+	\geometry{
+		a4paper,
+		total={160mm,240mm},  % fix over page
+		left=30mm,
+		top=30mm,
+	}
+}
+\setlength{\parindent}{0pt}
+
+\hypersetup{urlcolor=blue,linkcolor=black,citecolor=black,colorlinks=true} 
+%\usepackage{pstcol} 								% PSTricks with the standard color package
+
+\newtheorem{theorem}{{\bf Theorem}}
+\newtheorem{property}{{\bf Property}}
+\newtheorem{proposition}{{\bf Proposition}}
+\newtheorem{corollary}[proposition]{{\bf Corollary}}
+\newtheorem{lemma}[proposition]{{\bf Lemma}}
+
+\AtBeginDocument{\renewcommand*\contentsname{Index}}
+\AtBeginDocument{\renewcommand*\refname{References}}
+%\usepackage{fancyhdr}
+\setlength{\headheight}{40pt}
+\pagestyle{fancy}
+\fancyhead{} % clear all header fields
+\fancyhead[L]{
+ \begin{tabular}{rl}
+    \begin{picture}(25,15)(0,0)
+    \put(0,-8){\includegraphics[width=13mm, height=10mm]{Images/bachkhoa_logo.png}}
+    %\put(0,-8){\epsfig{width=10mm,figure=hcmut.eps}}
+   \end{picture}&
+	%\includegraphics[width=8mm, height=8mm]{hcmut.png} & %
+	\begin{tabular}{l}
+		\textbf{\bf \ttfamily Ho Chi Minh City University of Technology}\\
+		\textbf{\bf \ttfamily Faculty of Computer Science and Engineering}
+	\end{tabular} 	
+ \end{tabular}
+}
+\fancyhead[R]{
+	\begin{tabular}{l}
+		\tiny \bf \\
+		\tiny \bf 
+	\end{tabular}  }
+\fancyfoot{} % clear all footer fields
+\fancyfoot[L]{\scriptsize \ttfamily Lab Report - Semester 251}
+\fancyfoot[R]{\scriptsize \ttfamily Page {\thepage}/\pageref{TotalPagesA}}
+\renewcommand{\headrulewidth}{0.3pt}
+\renewcommand{\footrulewidth}{0.3pt}
+
+% Ensure pages that use the default "plain" style (e.g. ToC opening page)
+% keep the same footer alignment as normal pages.
+\fancypagestyle{plain}{
+	\fancyhf{}
+	\fancyhead[L]{
+	 \begin{tabular}{rl}
+			\begin{picture}(25,15)(0,0)
+			\put(0,-8){\includegraphics[width=13mm, height=10mm]{Images/bachkhoa_logo.png}}
+		 \end{picture}&
+			\begin{tabular}{l}
+				\textbf{\bf \ttfamily Ho Chi Minh City University of Technology}\\
+				\textbf{\bf \ttfamily Faculty of Computer Science and Engineering}
+			\end{tabular}
+	 \end{tabular}
+	}
+	\fancyhead[R]{
+		\begin{tabular}{l}
+			\tiny \bf \\
+			\tiny \bf
+		\end{tabular}
+	}
+	\fancyfoot[L]{\scriptsize \ttfamily Lab Report - Semester 251}
+	\fancyfoot[R]{\scriptsize \ttfamily Page {\thepage}/\pageref{TotalPagesA}}
+	\renewcommand{\headrulewidth}{0.3pt}
+	\renewcommand{\footrulewidth}{0.3pt}
+}
+
+
+%%%
+\setcounter{secnumdepth}{5}
+\setcounter{tocdepth}{4}
+\makeatletter
+
+
+
+% Customize the table of contents appearance
+\renewcommand{\cftsecnumwidth}{2.3em}
+\renewcommand{\cftsubsecnumwidth}{3.3em}
+\renewcommand{\cftsubsubsecnumwidth}{4.3em}
+
+% Reset bộ đếm paragraph mỗi khi có subsubsection mới
+\counterwithin{paragraph}{subsubsection}
+
+% Tùy chỉnh cách hiển thị số của paragraph
+\renewcommand{\theparagraph}{\thesubsubsection.\arabic{paragraph}}
+
+% Tùy chỉnh định dạng tiêu đề paragraph (tùy chọn)
+\titleformat{\paragraph}
+  {\normalfont\normalsize\bfseries}{\theparagraph}{1em}{}
+\titlespacing*{\paragraph}
+  {0pt}{3.25ex plus 1ex minus .2ex}{1.5ex plus .2ex}

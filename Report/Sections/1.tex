@@ -1,0 +1,74 @@
+\section{OS Initialization \& Threading Architecture}
+Before any scheduling or memory management can occur, the operating system must bootstrap itself. The \texttt{os.c} file serves as the entry point (\texttt{main()}) for our simulated environment. It simulates a symmetric multiprocessing (SMP) architecture using POSIX threads (\texttt{pthread}).
+
+\subsection{Configuration Parsing}
+The OS requires an input configuration file (e.g., \texttt{os\_1.conf}) to define the hardware limitations and process queue.
+\begin{lstlisting}[language=C, caption=Configuration parsing in \texttt{os.c}]
+static void read_config(const char * path) {
+    FILE * file = fopen(path, "r");
+    fscanf(file, "%d %d %d\n", &time_slot, &num_cpus, &num_processes);
+    
+    /* Deterministic mode for test replay */
+    if (getenv("OSSIM_DETERMINISTIC") != NULL && strcmp(getenv("OSSIM_DETERMINISTIC"), "1") == 0)
+        num_cpus = 1;
+        
+    /* Legacy vs Paging Memory Parsing */
+    memramsz = 268435456UL; // Default 256MB
+    memswpsz[0] = 16777216UL; // Default 16MB Swap
+    // ... logic to read memory boundaries and process list ...
+}
+\end{lstlisting}
+The OS uses the \texttt{OSSIM\_DETERMINISTIC} environment variable to force the system into a single-CPU mode. This is crucial for debugging race conditions. When testing scheduling policies, thread dispatch interleaving differences across multiple CPUs can cause outputs to be non-deterministic. By forcing \texttt{num\_cpus = 1}, we guarantee repeatable tests.
+
+\subsection{Bootstrapping the Kernel}
+The \texttt{main} function initializes the kernel memory devices before spawning threads.
+\begin{lstlisting}[language=C, caption=Kernel memory initialization]
+#ifdef MM_PAGING
+    struct memphy_struct mram;
+    struct memphy_struct mswp[PAGING_MAX_MMSWP];
+
+    init_memphy(&mram, memramsz, rdmflag);
+    for(sit = 0; sit < PAGING_MAX_MMSWP; sit++)
+        init_memphy(&mswp[sit], memswpsz[sit], rdmflag);
+        
+    struct mmpaging_ld_args *mm_ld_args = malloc(sizeof(struct mmpaging_ld_args));
+    mm_ld_args->mram = &mram;
+    mm_ld_args->mswp = &mswp;
+#endif
+
+init_scheduler();
+\end{lstlisting}
+We instantiate a single physical RAM (\texttt{mram}) and an array of Swap devices (\texttt{mswp}). These are explicitly defined in user-space but passed into the kernel structures later.
+
+\subsection{Multi-Threading Simulator}
+The system spawns $N$ CPU threads and 1 Loader thread.
+\begin{lstlisting}[language=C, caption=Spawning OS Threads]
+pthread_create(&ld, NULL, ld_routine, (void*)mm_ld_args);
+
+for (i = 0; i < num_cpus; i++) {
+    pthread_create(&cpu[i], NULL, cpu_routine, (void*)&args[i]);
+}
+
+for (i = 0; i < num_cpus; i++) {
+    pthread_join(cpu[i], NULL);
+}
+pthread_join(ld, NULL);
+\end{lstlisting}
+
+\begin{theorybox}[Loader Routine (\texttt{ld\_routine})]
+The loader acts as the "Disk to Memory" mechanism. It wakes up at specific time intervals (checked via \texttt{current\_time()}), reads the program text files, creates new \texttt{pcb\_t} blocks, initializes their page directories, and pushes them into the scheduler's ready queue via \texttt{add\_proc()}. 
+\end{theorybox}
+
+\subsection{The Program Loader (\texttt{loader.c})}
+To execute files, the OS must parse text-based instruction files into runnable \texttt{pcb\_t} structures. The \texttt{load()} function reads the process path and translates human-readable opcodes into internal \texttt{enum ins\_opcode\_t}.
+\begin{lstlisting}[language=C, caption=Opcode Parsing]
+static enum ins_opcode_t get_opcode(char * opt) {
+    if (!strcmp(opt, "calc")) return CALC;
+    else if (!strcmp(opt, "alloc")) return ALLOC;
+    else if (!strcmp(opt, "free")) return FREE;
+    else if (!strcmp(opt, "read")) return READ;
+    else if (!strcmp(opt, "write")) return WRITE;
+    // ...
+}
+\end{lstlisting}
+The loader then parses the required arguments (registers, offsets, sizes) depending on the opcode type. For instance, \texttt{READ} requires 3 arguments (\texttt{arg\_0}, \texttt{arg\_1}, \texttt{arg\_2}), whereas \texttt{FREE} only requires 1. This is stored directly in the \texttt{proc->code->text} array for the CPU to fetch.

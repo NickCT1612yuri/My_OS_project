@@ -1,0 +1,158 @@
+\section{Multi-level Paging (64-bit Scheme)}
+To handle the massive 128 PiB virtual address space associated with a 64-bit architecture, the standard single-level page table is highly inefficient. We implemented a 5-level page table scheme in \texttt{mm64.c}.
+
+\subsection{Address Translation Process}
+The 64-bit virtual address is segmented using strict bitmasks:
+\begin{lstlisting}[language=C, caption=5-Level Address Bit Extraction (\texttt{mm64.c})]
+int get_pd_from_address(addr_t addr, addr_t* pgd, addr_t* p4d, addr_t* pud, addr_t* pmd, addr_t* pt) {
+    *pgd = (addr & PAGING64_ADDR_PGD_MASK) >> PAGING64_ADDR_PGD_LOBIT; // bits 48-56
+    *p4d = (addr & PAGING64_ADDR_P4D_MASK) >> PAGING64_ADDR_P4D_LOBIT; // bits 39-47
+    *pud = (addr & PAGING64_ADDR_PUD_MASK) >> PAGING64_ADDR_PUD_LOBIT; // bits 30-38
+    *pmd = (addr & PAGING64_ADDR_PMD_MASK) >> PAGING64_ADDR_PMD_LOBIT; // bits 21-29
+    *pt  = (addr & PAGING64_ADDR_PT_MASK)  >> PAGING64_ADDR_PT_LOBIT;  // bits 12-20
+
+    if (((addr >> PAGING64_ADDR_PGD_HIBIT) & 0x1) != 0) {
+        /* Kernel-space canonical address: high bits must stay 1 */
+        *pgd |= BIT_ULL(PAGING64_ADDR_PGD_HIBIT - PAGING64_ADDR_PGD_LOBIT);
+    }
+    return 0;
+}
+\end{lstlisting}
+
+Given a user-space virtual address of 0x0000000000400000 (4MB), the extraction process yields the following indices: 
+
+\begin{itemize}
+    \item \textbf{PGD Index:} $(0\text{x}400000 \gg 48) \ \& \ 0\text{x}1\text{FF} = 0$
+    \item \textbf{P4D Index:} $(0\text{x}400000 \gg 39) \ \& \ 0\text{x}1\text{FF} = 0$
+    \item \textbf{PUD Index:} $(0\text{x}400000 \gg 30) \ \& \ 0\text{x}1\text{FF} = 0$
+    \item \textbf{PMD Index:} $(0\text{x}400000 \gg 21) \ \& \ 0\text{x}1\text{FF} = 2$
+    \item \textbf{PT Index:} $(0\text{x}400000 \gg 12) \ \& \ 0\text{x}1\text{FF} = 0$
+\end{itemize}
+
+The virtual address \texttt{0x0000000000400000} is translated through
+
+\[
+\mathrm{PGD}[0] \rightarrow \mathrm{P4D}[0] \rightarrow \mathrm{PUD}[0]
+\rightarrow \mathrm{PMD}[2] \rightarrow \mathrm{PT}[0]
+\] 
+
+\subsection{Canonical Address Handling}
+In a 64-bit architecture, the hardware typically implements only 48-bit or 57-bit addressing rather than the full 64-bit range. To prevent software from misusing the unused higher-order bits for non-address purposes, the architecture enforces \textbf{canonical addresses}: all unused bits must be copies of the highest implemented bit (sign-extension).
+
+In our implementation, \texttt{get\_pd\_from\_address()} checks bit 56 (the \texttt{PAGING64\_ADDR\_PGD\_HIBIT}). If this bit is set, the address belongs to \textbf{kernel space}, and the PGD index is OR-ed with an extra high bit to push it into the upper half of the PGD array. This creates a clean split:
+\begin{itemize}
+    \item \textbf{User-space addresses} (bits 63--57 all zero): PGD indices $0$ to $\sim255$
+    \item \textbf{Kernel-space addresses} (bits 63--57 all ones): PGD indices $256+$
+\end{itemize}
+This mirrors Linux's 5-level paging layout where the canonical address hole between \texttt{0x00ffffffffffffff} and \texttt{0xff00000000000000} is unmappable, ensuring user processes cannot access kernel memory through arithmetic overflow.
+
+\subsection{PTE Bit Layout}
+Each Page Table Entry (PTE) stores essential metadata, defined by bitmask macros in \texttt{mm64.h}:
+\begin{itemize}
+    \item \textbf{Present bit (\texttt{PAGING\_PTE\_PRESENT\_MASK}):} Set to 1 if the page is in RAM; 0 means a page fault is required on access.
+    \item \textbf{Swapped bit (\texttt{PAGING\_PTE\_SWAPPED\_MASK}):} Set to 1 if the page data currently resides on the SWAP device.
+    \item \textbf{Dirty bit (\texttt{PAGING\_PTE\_DIRTY\_MASK}):} Set to 1 if the page has been written since it was last loaded from swap.
+    \item \textbf{Frame Page Number (\texttt{PAGING\_PTE\_FPN\_MASK}, low bits):} The actual Physical Frame Number assigned to this virtual page.
+    \item \textbf{Swap type/offset (\texttt{PAGING\_PTE\_SWPTYP\_MASK} / \texttt{PAGING\_PTE\_SWPOFF\_MASK}):} When the page is swapped out, these fields record which swap device and at which offset the page data resides.
+\end{itemize}
+
+\subsection{Hierarchical Entry Population}
+\begin{lstlisting}[language=C, caption=Setting a PTE with 5-level hierarchy (\texttt{mm64.c})]
+int pte_set_fpn(struct pcb_t *caller, addr_t pgn, addr_t fpn) {
+    addr_t pgd=0, p4d=0, pud=0, pmd=0, pt=0;
+    struct krnl_t *krnl = caller->krnl;
+
+    get_pd_from_pagenum(pgn, &pgd, &p4d, &pud, &pmd, &pt);
+    
+    /* Set intermediate directory entries as present */
+    init_pte(&krnl->mm->pgd[pgd % PAGING64_MAX_PGN], 1, p4d + 1, 0, 0, 0, 0);
+    init_pte(&krnl->mm->p4d[p4d % PAGING64_MAX_PGN], 1, pud + 1, 0, 0, 0, 0);
+    init_pte(&krnl->mm->pud[pud % PAGING64_MAX_PGN], 1, pmd + 1, 0, 0, 0, 0);
+    init_pte(&krnl->mm->pmd[pmd % PAGING64_MAX_PGN], 1, pt + 1, 0, 0, 0, 0);
+    
+    addr_t *pte = &krnl->mm->pt[pgn % PAGING64_MAX_PGN];
+
+    SETBIT(*pte, PAGING_PTE_PRESENT_MASK);
+    CLRBIT(*pte, PAGING_PTE_SWAPPED_MASK);
+    SETVAL(*pte, fpn, PAGING_PTE_FPN_MASK, PAGING_PTE_FPN_LOBIT);
+    return 0;
+}
+\end{lstlisting}
+
+\begin{theorybox}[Design Decision: Pre-Allocated vs. Sparse Page Tables]
+\textbf{Production operating systems} such as Linux implement true sparse hierarchical page tables: lower-level directories (P4D, PUD, PMD, PT) are allocated on demand via \texttt{get\_free\_page()} only when a virtual address in that range is first accessed. This means a process using only 1 MB of heap allocates a tiny fraction of the theoretical page table space.
+
+\textbf{Our simulator} adopts a different trade-off. In \texttt{init\_mm()} (\texttt{mm64.c:447--451}), all five paging-level arrays are \textbf{pre-allocated as fixed-size flat arrays} using \texttt{calloc(PAGING64\_MAX\_PGN, sizeof(addr\_t))}:
+\begin{lstlisting}[language=C]
+mm->pgd = calloc(PAGING64_MAX_PGN, sizeof(addr_t));
+mm->p4d = calloc(PAGING64_MAX_PGN, sizeof(addr_t));
+mm->pud = calloc(PAGING64_MAX_PGN, sizeof(addr_t));
+mm->pmd = calloc(PAGING64_MAX_PGN, sizeof(addr_t));
+mm->pt  = calloc(PAGING64_MAX_PGN, sizeof(addr_t));
+\end{lstlisting}
+This sacrifices memory efficiency in favor of simplicity and direct array-based indexing (\texttt{O(1)} access via modular arithmetic). The \texttt{pte\_set\_fpn} function still populates the hierarchy chain \textit{logically} by marking PGD$\to$P4D$\to$PUD$\to$PMD entries as present only when pages are mapped, demonstrating the correctness of the multi-level translation mechanism.
+\end{theorybox}
+
+\subsection{The \texttt{vmap\_pgd\_memset} System Call}
+The specification requires students to implement a \texttt{vmap\_pgd\_memset} operation to emulate page directory behavior for the 64-bit address scheme. This operation is invoked through \texttt{SYSMEM\_MAP\_OP} (syscall 17, operation code 1):
+\begin{lstlisting}[language=C, caption=\texttt{vmap\_pgd\_memset} (\texttt{mm64.c})]
+int vmap_pgd_memset(struct pcb_t *caller, addr_t addr, int pgnum) {
+    int pgit;
+    addr_t pgn = (addr >> PAGING64_ADDR_PT_SHIFT);
+    addr_t pattern = 0xdeadbeefUL;
+
+    for (pgit = 0; pgit < pgnum; pgit++) {
+        caller->krnl->mm->pt[(pgn + pgit) % PAGING64_MAX_PGN] = pattern;
+    }
+    return 0;
+}
+\end{lstlisting}
+This function fills \texttt{pgnum} consecutive page table entries with the sentinel pattern \texttt{0xdeadbeef}. This serves as a dummy allocation used to test and verify that the 64-bit address scheme's page directory traversal is functioning correctly without performing real physical memory allocation.
+
+\subsection{Quantitative Statistics (Required by Specification)}
+The specification asks for statistics on memory access activity and multi-level paging storage size. We report both here.
+
+\textbf{1) Multi-level paging storage size}\\
+From \texttt{mm64.h},
+\[
+\texttt{PAGING64\_MAX\_PGN} = \left\lceil \frac{2^{21}}{4096} \right\rceil = 512
+\]
+Each paging level array stores 512 entries of type \texttt{addr\_t} (8 bytes on 64-bit):
+\[
+512 \times 8 = 4096\ \text{bytes per level}
+\]
+With 5 levels (PGD, P4D, PUD, PMD, PT):
+\[
+5 \times 4096 = 20480\ \text{bytes} = 20\ \text{KiB per process mm}
+\]
+This matches the \texttt{calloc(PAGING64\_MAX\_PGN, sizeof(addr\_t))} allocation pattern in \texttt{init\_mm()}.
+
+\textbf{2) Memory access activity statistics from actual outputs}\\
+We use trace-observable memory-management events (allocation/free logs and page-table dumps) from provided outputs:
+
+\begin{table}[!htbp]
+\centering
+\small
+\renewcommand{\arraystretch}{1.2}
+\begin{tabularx}{\linewidth}{|>{\ttfamily\footnotesize\raggedright\arraybackslash}p{0.43\linewidth}|>{\centering\arraybackslash}p{0.10\linewidth}|>{\centering\arraybackslash}p{0.10\linewidth}|>{\centering\arraybackslash}p{0.18\linewidth}|>{\centering\arraybackslash}p{0.11\linewidth}|}
+\hline
+\textbf{Output file} & \textbf{\texttt{alloc}} & \textbf{\texttt{free}} & \textbf{\texttt{free failed}} & \textbf{\texttt{pgtbl}} \\
+\hline
+\texttt{os\_1\_mlq\_paging.actual.output} & 9 & 6 & 0 & 23 \\
+\hline
+\texttt{os\_2\_mlq\_paging.actual.output} & 4 & 4 & 4 & 12 \\
+\hline
+\end{tabularx}
+\caption{Trace-derived memory activity statistics from provided testcase outputs.}
+\end{table}
+
+\textbf{3) Translation memory-access cost (analytical)}\\
+For 5-level paging without TLB hit, a data access requires up to 5 page-walk reads plus 1 data memory access:
+\[
+A_{\text{no TLB}} = 5 + 1 = 6
+\]
+On a TLB hit, only the final data access is required:
+\[
+A_{\text{TLB hit}} = 1
+\]
+These figures explain why hierarchical paging is scalable in address-space size but still benefits strongly from TLB locality.

@@ -1,0 +1,99 @@
+\usetikzlibrary{calc}
+\begin{titlepage}
+%
+\begin{tikzpicture}[remember picture, overlay]
+    % 
+    \draw[line width=3pt, rounded corners=15pt,blue]
+        ($(current page.north west)+(0.4cm,-0.4cm)$)
+        rectangle 
+        ($(current page.south east)+(-0.4cm,0.4cm)$);   
+    % 
+    \draw[line width=0.2pt, rounded corners=15pt, blue]
+        ($(current page.north west)+(0.7cm,-0.7cm)$)
+        rectangle 
+        ($(current page.south east)+(-0.7cm,0.7cm)$);
+\end{tikzpicture}
+
+\vspace*{-2cm}
+
+\begin{center}
+VIETNAM NATIONAL UNIVERSITY HO CHI MINH CITY\\
+HO CHI MINH CITY UNIVERSITY OF TECHNOLOGY \\
+FACULTY OF COMPUTER SCIENCE AND ENGINEERING
+\end{center}
+
+\begin{figure}[h!]
+\begin{center}
+\includegraphics[width=12cm]{Images/bachkhoa_logo.png}
+\end{center}
+\end{figure}
+
+\vspace*{-1.5cm}
+
+\begin{center}
+\begin{tabular}{c}
+\multicolumn{1}{c}{\textbf{{\LARGE Operating System Lab (CO2018)}}}\\
+~~\\
+\multicolumn{1}{c}{\textbf{{\LARGE Class: CC02 - Group: MyOS}}}\\
+\\
+\hline
+\\
+\multicolumn{1}{c}{\textbf{{\Large LAB REPORT}}}\\
+\\
+\textbf{{\LARGE SIMPLE OPERATING SYSTEM}}\\
+
+\\
+\hline
+\end{tabular}
+\end{center}
+
+\vspace{1.2cm}
+
+\large\begin{table}[h]
+\begin{tabular}{ l l l l }  
+\hspace{3 cm} & Instructor: & Hoàng Lê Hải Thanh& \\
+
+& Students: 
+& Dương Minh Nhật & 2452889 \\   
+& & Võ Minh Trí & 2453323 \\   
+& & Nguyễn Thái Hoài Nam & 2452794 \\ 
+& & Nguyễn Trọng Nhân & 2452883 \\ 
+& & Lê Tuấn Kiệt  & 2452632 \\    
+\end{tabular}  
+\end{table}
+
+\vspace{1.6cm}
+
+\begin{center}
+{\footnotesize Ho Chi Minh City, May, 2026}
+\end{center}
+
+\end{titlepage}
+
+%\thispagestyle{empty}
+
+\begin{center}
+\Large MEMBERLIST
+\end{center}
+
+\begin{table}[h!]
+\centering
+\begin{tabularx}{\textwidth}{|c|l|c|X|c|}
+\hline
+No. & Name & ID & Task & Performance \\
+\hline
+1 & Dương Minh Nhật & 2452889 & Memory Management, System Calls & 100\% \\  
+\hline
+2 & Võ Minh Trí & 2453323 & Memory Management & 100\% \\ 
+\hline
+3 & Nguyễn Thái Hoài Nam & 2452794 & CPU Execution, Scheduling & 100\% \\ 
+\hline
+4 & Nguyễn Trọng Nhân & 2452883 & Multi-level Paging, OS Init & 100\% \\
+\hline
+5 & Lê Tuấn Kiệt & 2452632 & Scheduling, OS Threading & 100\% \\
+\hline
+\end{tabularx}
+\end{table}
+
+\newpage
+\tableofcontents

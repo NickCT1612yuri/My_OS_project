@@ -1,0 +1,147 @@
+\documentclass[12pt, a4paper]{article}
+
+% --- Encoding, Language, and Fonts ---
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[vietnamese, english]{babel}
+\usepackage{mathpazo} % Palatino font
+\usepackage{microtype}
+
+% --- Custom University Package ---
+\usepackage{hcmut}
+
+% --- Layout & Formatting ---
+\usepackage{geometry}
+\geometry{a4paper, margin=1in, top=1.2in, bottom=1.2in}
+\usepackage{setspace}
+\setstretch{1.25}
+\usepackage{indentfirst}
+\setlength{\parindent}{2em}
+\setlength{\parskip}{0.25em plus 0.08em minus 0.05em}
+
+% --- Math ---
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{amsfonts}
+\usepackage{bm}
+
+% --- Graphics, Tables, & Floats ---
+\usepackage{graphicx}
+\usepackage{tikz}
+\usepackage{float}
+\usepackage{caption}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{enumitem}
+
+% --- Colors & Boxes ---
+\usepackage{xcolor}
+\usepackage[many]{tcolorbox}
+
+% --- Section Styling ---
+\usepackage{titlesec}
+\titleformat{\section}
+  {\normalfont\Large\bfseries\color{blue!70!black}}
+  {\thesection}{1em}{}[{\titlerule[0.8pt]}]
+\titleformat{\subsection}
+  {\normalfont\large\bfseries\color{blue!60!black}}
+  {\thesubsection}{1em}{}
+\titleformat{\subsubsection}
+  {\normalfont\normalsize\bfseries\color{blue!50!black}}
+  {\thesubsubsection}{1em}{}
+\titlespacing*{\section}{0pt}{0.9em plus 0.2em minus 0.15em}{0.4em plus 0.1em}
+\titlespacing*{\subsection}{0pt}{0.75em plus 0.18em minus 0.1em}{0.3em plus 0.08em}
+\titlespacing*{\subsubsection}{0pt}{0.6em plus 0.14em minus 0.08em}{0.22em plus 0.06em}
+
+% --- Custom Callout Boxes ---
+\newtcolorbox{infobox}[1][]{
+  colback=blue!5!white,
+  colframe=blue!75!black,
+  fonttitle=\bfseries,
+  title=#1,
+  boxrule=1pt,
+  arc=4pt,
+  shadow={2mm}{-1mm}{0mm}{black!30}
+}
+\newtcolorbox{theorybox}[1][]{
+  colback=green!5!white,
+  colframe=green!60!black,
+  fonttitle=\bfseries,
+  title=#1,
+  boxrule=1pt,
+  arc=4pt
+}
+\newtcolorbox{questionbox}[1][]{
+  colback=blue!5!white,
+  colframe=blue!75!black,
+  fonttitle=\bfseries,
+  title=#1, % <--- This maps your bracket text to the title
+  boxrule=1pt,
+  arc=4pt
+}
+% --- Code Snippet Styling ---
+\usepackage{listings}
+\definecolor{codegreen}{rgb}{0,0.6,0}
+\definecolor{codegray}{rgb}{0.5,0.5,0.5}
+\definecolor{codepurple}{rgb}{0.58,0,0.82}
+\definecolor{backcolour}{rgb}{0.96,0.96,0.96}
+
+\lstdefinestyle{mystyle}{
+    backgroundcolor=\color{backcolour},   
+    commentstyle=\color{codegreen}\itshape,
+    keywordstyle=\color{blue}\bfseries,
+    numberstyle=\tiny\color{codegray},
+    stringstyle=\color{codepurple},
+    basicstyle=\ttfamily\footnotesize,
+    breakatwhitespace=false,         
+    breaklines=true,                 
+    captionpos=b,                    
+    keepspaces=true,                 
+    numbers=left,                    
+    numbersep=5pt,                  
+    showspaces=false,                
+    showstringspaces=false,
+    showtabs=false,                  
+    tabsize=2,
+    frame=single,
+    rulecolor=\color{black!30}
+}
+\lstset{style=mystyle}
+
+% --- Custom Commands ---
+\newcommand{\code}[1]{\textcolor{green!60!black}{\texttt{#1}}}
+
+% --- Hyperlinks ---
+\usepackage{hyperref}
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue!60!black,
+    filecolor=magenta,      
+    urlcolor=blue!60!black,
+    pdftitle={Operating Systems Assignment},
+}
+
+  % Stable total-page marker used by footer in hcmut.sty.
+  % We write the page counter directly to the aux file to avoid anchor reuse.
+  \makeatletter
+  \AtEndDocument{\immediate\write\@auxout{\string\newlabel{TotalPagesA}{{}{\thepage}}}}
+  \makeatother
+
+% --- Document Info ---
+\title{}
+\author{}
+\date{}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% THE DOCUMENT BEGINS                                                %
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\begin{document}
+\input{Sections/0}
+\input{Sections/1}
+\input{Sections/2}
+\input{Sections/3}
+\input{Sections/4}
+\input{Sections/5}
+\input{Sections/6}
+\input{Sections/7}
+\input{Sections/8}
+\end{document}

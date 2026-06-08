@@ -1,0 +1,102 @@
+\section{System Call Integration}
+A robust OS must isolate kernel memory from user processes. The \texttt{memmap} interface (Syscall number 17, dispatched via \texttt{libsyscall}) guarantees this protection.
+
+\begin{infobox}[Terminology Clarification: Opcode vs. Syscall Number]
+In this simulator, \texttt{SYSCALL} is an \textbf{instruction opcode} (defined in \texttt{common.h}'s \texttt{enum ins\_opcode\_t}). When \texttt{cpu.c:run()} encounters this opcode, it calls \texttt{libsyscall(proc, arg\_0, arg\_1, arg\_2, arg\_3)} and sandwiches the call between \texttt{mode\_bit = 0} (Kernel) and \texttt{mode\_bit = 1} (User) transitions. Inside \texttt{libsyscall}, argument \texttt{arg\_0} carries the \textbf{syscall number} (e.g., 17 for \texttt{\_\_sys\_memmap}), which is then dispatched through \texttt{syscalltbl.lst}. The two concepts --- the opcode \texttt{SYSCALL} and the syscall number 17 --- are distinct.
+\end{infobox}
+
+\subsection{Register-Based Argument Passing}
+Arguments are packed into a \texttt{sc\_regs} structure. Register \texttt{a1} contains the operation code, while \texttt{a2} and \texttt{a3} hold arguments.
+
+\vspace{0.5em}
+\begin{table}[H]
+    \centering
+    \renewcommand{\arraystretch}{1.2}
+    \begin{tabular}{|l|p{8cm}|}
+    \hline
+    \textbf{Opcode} & \textbf{Kernel Action} \\
+    \hline
+    \texttt{SYSMEM\_MAP\_OP (1)} & Executes \texttt{vmap\_pgd\_memset()} to emulate page directory behavior. \\
+    \texttt{SYSMEM\_INC\_OP (2)} & Executes \texttt{inc\_vma\_limit()} to safely expand the heap. \\
+    \texttt{SYSMEM\_SWP\_OP (3)} & Executes \texttt{\_\_mm\_swap\_page()} for disk swapping. \\
+    \texttt{SYSMEM\_IO\_READ (4)} & Reads exactly 1 byte from physical memory. \\
+    \texttt{SYSMEM\_IO\_WRITE (5)} & Writes exactly 1 byte to physical memory. \\
+    \hline
+    \end{tabular}
+    \caption{SYSCALL 17 Operations}
+\end{table}
+\vspace{0.5em}
+
+\subsection{System Call Dispatching and Protection}
+The kernel provides a centralized dispatcher that validates every request. The function \texttt{\_syscall()} (with a leading underscore, defined in \texttt{syscall.c}) uses C preprocessor X-macros to dynamically build its dispatch switch statement from the \texttt{syscalltbl.lst} file:
+
+\vspace{0.5em}
+\begin{lstlisting}[language=C, caption=Kernel Syscall Dispatcher (\texttt{syscall.c})]
+#define __SYSCALL(nr, sym) case nr: return __##sym(krnl,pid,regs);
+int _syscall(struct krnl_t *krnl, uint32_t pid, uint32_t nr, 
+             struct sc_regs* regs)
+{
+    switch (nr) {
+    #include "syscalltbl.lst"
+    default: return __sys_ni_syscall(krnl, regs);
+    }
+};
+
+// syscalltbl.lst contains:
+// __SYSCALL(0, sys_listsyscall)
+// __SYSCALL(17, sys_memmap)
+\end{lstlisting}
+\vspace{0.5em}
+The X-macro \texttt{\_\_SYSCALL(nr, sym)} expands each line of \texttt{syscalltbl.lst} into a \texttt{case} statement. For example, \texttt{\_\_SYSCALL(17, sys\_memmap)} becomes \texttt{case 17: return \_\_sys\_memmap(krnl, pid, regs);}.  The \texttt{\_\_sys\_ni\_syscall} default handler safely ignores invalid syscall numbers.
+
+\subsection{PID-Based Kernel Traversal}
+The specification explicitly requires: ``\textit{The process PCB is prohibited from being passed directly. It must be accessed by traversing in kernel mode to obtain the PCB from the kernel structure using the given PID.}'' The system call handler \texttt{\_\_sys\_memmap()} in \texttt{sys\_mem.c} adheres to this requirement:
+
+\begin{lstlisting}[language=C, caption=PID-based process lookup in \texttt{\_\_sys\_memmap} (\texttt{sys\_mem.c})]
+int __sys_memmap(struct krnl_t *krnl, uint32_t pid, struct sc_regs* regs) {
+    int memop = regs->a1;
+    BYTE value;
+    
+    /* Resolve caller by PID -- NOT by passing pcb_t* directly */
+    struct pcb_t *caller = find_proc_by_pid(pid);
+    if (caller == NULL) return -1;
+    
+    switch (memop) {
+    case SYSMEM_MAP_OP:  vmap_pgd_memset(caller, regs->a2, regs->a3); break;
+    case SYSMEM_INC_OP:  inc_vma_limit(caller, regs->a2, regs->a3); break;
+    case SYSMEM_SWP_OP:  __mm_swap_page(caller, regs->a2, regs->a3); break;
+    case SYSMEM_IO_READ:
+        MEMPHY_read(krnl->mram, regs->a2, &value);
+        regs->a3 = value;
+        break;
+    case SYSMEM_IO_WRITE:
+        MEMPHY_write(krnl->mram, regs->a2, regs->a3);
+        break;
+    }
+    return 0;
+}
+\end{lstlisting}
+
+The \texttt{find\_proc\_by\_pid()} function (in \texttt{sched.c}) traverses two data structures under the global \texttt{queue\_lock} mutex:
+\begin{enumerate}
+    \item \textbf{The \texttt{running\_list}:} Searched first, since the caller is most likely currently running.
+    \item \textbf{All 140 MLQ ready queues:} Searched sequentially if the process is not found in the running list (possible during concurrent scheduling transitions).
+\end{enumerate}
+This PID-based lookup ensures that the system call handler operates entirely in kernel space, using only the PID as a numeric handle. The user process never passes its \texttt{pcb\_t*} pointer across the user/kernel boundary, preventing forged pointer attacks.
+
+\subsection{Wrapper Library (\texttt{libstd.c})}
+The user-space library \texttt{libsyscall()} in \texttt{libstd.c} acts as a thin wrapper that packs arguments into a \texttt{sc\_regs} structure and invokes the kernel dispatcher:
+\begin{lstlisting}[language=C, caption=User-space syscall wrapper (\texttt{libstd.c})]
+int libsyscall(struct pcb_t *caller,
+               uint32_t syscall_idx,
+               arg_t a1, arg_t a2, arg_t a3)
+{
+   struct sc_regs regs;
+   regs.a1 = a1;
+   regs.a2 = a2;
+   regs.a3 = a3;
+   return _syscall(caller->krnl, caller->pid, syscall_idx, &regs);
+}
+\end{lstlisting}
+
+\noindent\textbf{Protection and Isolation:} Without system calls, a process could manually manipulate its \texttt{struct pcb\_t} and page tables to read another user's data or crash the system. By forcing the user to call \texttt{syscall(17)}, the CPU switches to Kernel Mode and resolves the caller by PID. The \texttt{SYSMEM\_IO\_READ} and \texttt{SYSMEM\_IO\_WRITE} operations access physical memory through \texttt{krnl->mram}---the kernel's own memory reference---rather than any user-provided pointer. Argument validation and alignment handling are then enforced in downstream memory-management routines (for example, \texttt{inc\_vma\_limit()} and related VM helpers).
